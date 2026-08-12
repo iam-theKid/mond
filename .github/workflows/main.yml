@@ -29,7 +29,7 @@ jobs:
         run: |
           xcodebuild \
             -resolvePackageDependencies \
-            -project mond/mond.xcodeproj \
+            -project mond.xcodeproj \
             -scheme mond
 
       - name: Build unsigned iOS app
