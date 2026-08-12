@@ -11,28 +11,20 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Show Xcode version
-        run: |
-          xcodebuild -version
-          xcodebuild -showsdks
-
-      - name: Show available schemes
-        run: |
-          xcodebuild \
-            -project mond/mond.xcodeproj \
-            -list
+        run: xcodebuild -version
 
       - name: Resolve Swift packages
         run: |
           xcodebuild \
             -resolvePackageDependencies \
-            -project mond.xcodeproj \
+            -project mond/mond.xcodeproj \
             -scheme mond
 
-      - name: Build unsigned iOS app
+      - name: Build mond
         run: |
           set -o pipefail
 
@@ -48,12 +40,12 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Find built app
+      - name: Create IPA
         run: |
-          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products" \
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" \
+            -maxdepth 1 \
             -type d \
             -name "mond.app" \
-            -path "*Release-iphoneos*" \
             -print \
             -quit)
 
@@ -63,25 +55,14 @@ jobs:
             exit 1
           fi
 
-          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
-          echo "Found app: $APP_PATH"
-
-      - name: Create unsigned IPA
-        run: |
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
-
-          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/mond.app"
 
           cd "$RUNNER_TEMP/ipa"
           zip -r "$RUNNER_TEMP/mond.ipa" Payload
-
-      - name: Show IPA contents
-        run: |
-          unzip -l "$RUNNER_TEMP/mond.ipa" | head -100
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: mond-unsigned
           path: ${{ runner.temp }}/mond.ipa
-          if-no-files-found: error
