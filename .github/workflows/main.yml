@@ -37,7 +37,7 @@ jobs:
           set -o pipefail
 
           xcodebuild \
-            -project mond/mond.xcodeproj \
+            -project mond.xcodeproj \
             -scheme mond \
             -configuration Release \
             -sdk iphoneos \
