@@ -1,0 +1,87 @@
+name: Build mond IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Show available schemes
+        run: |
+          xcodebuild \
+            -project mond/mond.xcodeproj \
+            -list
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project mond/mond.xcodeproj \
+            -scheme mond
+
+      - name: Build unsigned iOS app
+        run: |
+          set -o pipefail
+
+          xcodebuild \
+            -project mond/mond.xcodeproj \
+            -scheme mond \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Find built app
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products" \
+            -type d \
+            -name "mond.app" \
+            -path "*Release-iphoneos*" \
+            -print \
+            -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "mond.app not found"
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 4 -print
+            exit 1
+          fi
+
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "Found app: $APP_PATH"
+
+      - name: Create unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+
+          cd "$RUNNER_TEMP/ipa"
+          zip -r "$RUNNER_TEMP/mond.ipa" Payload
+
+      - name: Show IPA contents
+        run: |
+          unzip -l "$RUNNER_TEMP/mond.ipa" | head -100
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: mond-unsigned
+          path: ${{ runner.temp }}/mond.ipa
+          if-no-files-found: error
