@@ -1,69 +1,68 @@
-name: build and release
+name: Build mond IPA
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'README.md'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-concurrency:
-  group: ios-release-development
-  cancel-in-progress: true
 
 jobs:
-  build-and-release:
+  build:
     runs-on: macos-latest
 
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: install xcpretty
-        run: sudo gem install xcpretty
+      - name: Show Xcode version
+        run: xcodebuild -version
 
-      - name: build
+      - name: Resolve Swift packages
         run: |
-          set -euo pipefail
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project mond.xcodeproj \
+            -scheme mond
+
+      - name: Build mond
+        run: |
+          set -o pipefail
+
           xcodebuild \
             -project mond.xcodeproj \
             -scheme mond \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
-            build | xcpretty
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
 
-          rm -rf Payload mond.ipa
-          mkdir -p Payload
-
-          APP_PATH="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
-          cp -R "$APP_PATH" Payload/
-
-          ditto -c -k --keepParent Payload mond.ipa
-          rm -rf Payload
-
-      - name: release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Create IPA
         run: |
-          set -euo pipefail
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" \
+            -maxdepth 1 \
+            -type d \
+            -name "mond.app" \
+            -print \
+            -quit)
 
-          if gh release view development >/dev/null 2>&1; then
-            gh release delete development --yes --cleanup-tag
+          if [ -z "$APP_PATH" ]; then
+            echo "mond.app not found"
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 4 -print
+            exit 1
           fi
 
-          NOTES="$(git log -5 --pretty=format:'- %h %s')"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/mond.app"
 
-          gh release create development mond.ipa \
-            --target "${GITHUB_SHA}" \
-            --title "Development" \
-            --prerelease \
-            --notes "automated build from ${GITHUB_SHA}
+          cd "$RUNNER_TEMP/ipa"
+          zip -r "$RUNNER_TEMP/mond.ipa" Payload
 
-          ${NOTES}"
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: mond-unsigned
+          path: ${{ runner.temp }}/mond.ipa
