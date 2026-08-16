@@ -32,7 +32,7 @@ jobs:
         run: |
           xcodebuild \
             -resolvePackageDependencies \
-            -project mond/mond.xcodeproj \
+            -project mond.xcodeproj \
             -scheme mond
 
       - name: Build unsigned iOS app
@@ -40,7 +40,7 @@ jobs:
           set -o pipefail
 
           xcodebuild \
-            -project mond/mond.xcodeproj \
+            -project mond.xcodeproj \
             -scheme mond \
             -configuration Release \
             -sdk iphoneos \
